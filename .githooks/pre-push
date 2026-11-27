@@ -1,0 +1,5 @@
+#!/bin/sh
+# push 전에 프로덕션 빌드·린트·테스트를 강제한다 (scripts/verify.mjs).
+# 이 훅은 npm install 때 `prepare` 가 core.hooksPath=.githooks 로 걸어 둔다 — 사람이 기억할 것 없음.
+# 우회하려면 `git push --no-verify` 를 명시해야 한다. 그건 기록에 남는 선택이다.
+exec node "$(git rev-parse --show-toplevel)/scripts/verify.mjs" --pre-push

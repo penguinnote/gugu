@@ -1,0 +1,8 @@
+로뎀 월드 길 · 분수 광장 바닥 무늬 — CC0(공개 도메인) 텍스처 (2026-11-27 출처 확인)
+
+T_UnevenBrick_BaseColor.jpg   Quaternius — Medieval Village MegaKit (Standard, 무료판)
+                              라이선스 CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+                              받은 곳 https://quaternius.itch.io/medieval-village-megakit
+                              (제작자 안내 페이지 https://quaternius.com/packs/medievalvillagemegakit.html)
+                              묶음의 Textures/T_UnevenBrick_BaseColor.png(2048×2048)를 512×512 JPG 로 줄인 것.
+                              묶음의 License_Standard.txt 에 CC0 1.0 이 적혀 있다.

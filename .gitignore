@@ -1,0 +1,68 @@
+# --- 민감 정보: 절대 커밋 금지 ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials*.json
+
+# 실제 명단·보고서 데이터
+data/
+*.local.csv
+*.local.json
+seed-real*
+
+# 빌드 때 받는 형태소 분석기 모델(scripts/fetch-kiwi-model.mjs)
+vendor/
+
+# --- Node ---
+node_modules/
+dist/
+build/
+.next/
+.next-verify/
+.vercel/
+coverage/
+*.log
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- macOS / 에디터 ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# --- Next.js ---
+/out/
+*.tsbuildinfo
+next-env.d.ts
+.pnp
+.pnp.*
+
+# 시드 스크립트가 잠깐 쓰는 복사본
+supabase/seeds_run/
+
+# Vercel CLI 링크 정보 (vercel link) — 계정·프로젝트 id
+.vercel/
+
+# 백업 파일 — 암호화 전이든 후든 절대 커밋 금지
+*.age
+*.sql.gz
+*.dump
+gugu-backup-*
+gugu-restore/

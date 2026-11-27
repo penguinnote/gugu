@@ -1,0 +1,120 @@
+<!doctype html>
+<!--
+  앱 시작 페이지(2026-11-01) — 앱을 켜면 서버가 첫 화면을 만드는 동안 흰 백지 대신 이 페이지가 먼저 뜬다.
+  서비스 워커(public/sw.js)가 이 파일을 기기에 담아 두었다가, 바깥에서 들어온 '/' 열기(홈 화면 아이콘 · 새 창)에 곧바로 내준다.
+  곧장 '/' 로 다시 가고, 서버 화면이 그려질 때까지 브라우저는 이 페이지를 그대로 보여 준다.
+    1단계  가운데 구구만 크게(아이폰 첫 화면 그림 public/splash/*.png 와 같은 자리 · 같은 크기, 2026-11-10 — 아이콘 판을 뺐다)
+           구구는 두 번 콩콩 뛰고 오른 날개를 살짝 흔든다(2026-11-10 사용자 요청). 그림은 scripts/gugu-assets.mjs 가 아래에 넣는다
+    2단계  0.15초 뒤 아래 진한 초록 막대(굵고 끝이 둥글다, 2026-11-10)가 3/5 까지 차서 홈을 기다린다
+           (2026-11-04 사용자 요청 — 90% 언저리에 오래 머물지 않게. 서버가 잠들었다 깨면 홈 준비에 5초쯤 걸린다)
+    3단계  홈이 다 준비되면(최소 1.6초 — 구구 인사를 다 보게) 막대를 끝까지 채우고 '/' 로 간다 — 2026-11-02 사용자 요청: 막대가 끝까지 차는 걸 보고 싶다
+           그동안 서비스 워커가 '/' 를 미리 받아 두고(public/sw.js), 다 받으면 알려 준다. 막대가 다 찬 채로 몇 초 멈춰 있던 것을
+           고쳤다(2026-11-04) — 다 찬 막대는 이제 곧 넘어간다는 뜻이다.
+    넘어갈 때 홈과 겹쳐 바뀐다(2026-11-03, @view-transition — globals.css 에도 같은 줄). 홈 머리 그림도 미리 받아 둔다.
+  바탕은 흰색 하나(2026-11-10 어두운 모드 뺌).
+  다른 파일을 부르지 않는다(구구 그림도 이 파일 안에).
+-->
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="same-origin" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>구구</title>
+    <link rel="preload" as="image" href="/home/hd-home.webp" fetchpriority="low" />
+    <meta name="color-scheme" content="only light" />
+    <style>
+      /* 구구 170px(그림 높이 189) · 막대 180 × 8, 진한 초록 = 앱 초록 버튼의 아랫단 색 --gg-sky-lip(2026-11-10 — 홈의 초록과 이어지게) */
+      :root { --bg: #ffffff; --track: #eef8d9; --bar: #7fb11c; color-scheme: only light; }
+      html, body { margin: 0; height: 100%; background: var(--bg); }
+      .stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+      .gugu { position: relative; width: 170px; height: 189px; }
+      .hop { width: 100%; height: 100%; }
+      .gugu svg { display: block; width: 100%; height: 100%; overflow: visible; }
+      .shadow { position: absolute; left: 50%; bottom: -4px; width: 92px; height: 12px; margin-left: -46px; border-radius: 50%; background: rgba(27, 31, 39, 0.1); }
+      .bar { position: absolute; top: calc(50% + 122px); left: 50%; width: 180px; height: 8px; margin-left: -90px; border-radius: 99px; background: var(--track); overflow: hidden; opacity: 0; transition: opacity 0.2s ease; }
+      .bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--bar); }
+      .on .bar { opacity: 1; }
+      .on .bar i { width: 60%; transition: width 1.6s cubic-bezier(0.3, 0.6, 0.4, 1); }
+      .done .bar i { width: 100%; transition: width 0.5s ease-out; }
+      /* 콩콩 두 번(0.15초부터 0.8초) → 오른 날개 살짝 흔들기 두 번. 뛰는 동안 두 날개도 조금 퍼덕인다. 그림자는 뛰면 작아진다 */
+      .hop { animation: gg-hop 0.8s ease-in-out 0.15s 1 both; transform-origin: 50% 100%; }
+      .shadow { animation: gg-shadow 0.8s ease-in-out 0.15s 1 both; }
+      @keyframes gg-hop {
+        0% { transform: translateY(0) scale(1, 1); }
+        8% { transform: translateY(0) scale(1.05, 0.93); }
+        25% { transform: translateY(-30px) scale(0.97, 1.04); }
+        42% { transform: translateY(0) scale(1.06, 0.92); }
+        50% { transform: translateY(0) scale(1.03, 0.96); }
+        67% { transform: translateY(-24px) scale(0.98, 1.03); }
+        86% { transform: translateY(0) scale(1.05, 0.94); }
+        100% { transform: translateY(0) scale(1, 1); }
+      }
+      @keyframes gg-shadow {
+        0%, 8%, 42%, 50%, 86%, 100% { transform: scale(1); opacity: 1; }
+        25% { transform: scale(0.6); opacity: 0.55; }
+        67% { transform: scale(0.68); opacity: 0.6; }
+      }
+      .gugu .lw, .gugu .rw { transform-box: view-box; }
+      .gugu .lw { transform-origin: -44px 12px; animation: gg-flap-l 0.8s ease-in-out 0.15s 1; }
+      .gugu .rw { transform-origin: 44px 12px; animation: gg-flap-r 0.8s ease-in-out 0.15s 1, gg-wave 0.7s ease-in-out 1s 1; }
+      @keyframes gg-flap-l { 0%, 42%, 50%, 86%, 100% { transform: rotate(0); } 25%, 67% { transform: rotate(18deg); } }
+      @keyframes gg-flap-r { 0%, 42%, 50%, 86%, 100% { transform: rotate(0); } 25%, 67% { transform: rotate(-18deg); } }
+      @keyframes gg-wave { 0%, 100% { transform: rotate(0); } 25%, 75% { transform: rotate(-38deg); } 50% { transform: rotate(-14deg); } }
+      @view-transition { navigation: auto; }
+      @media (prefers-reduced-motion: reduce) { .hop, .shadow, .gugu .lw, .gugu .rw { animation: none !important; } .bar, .bar i { transition: none !important; } }
+    </style>
+  </head>
+  <body>
+    <div class="stage" id="stage" aria-busy="true">
+      <div class="gugu" role="img" aria-label="구구">
+        <span class="shadow"></span>
+        <div class="hop">
+<!-- gugu:start — scripts/gugu-assets.mjs 가 채운다 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-70 -88 140 156" aria-hidden="true"><g><ellipse cx="-17" cy="56" rx="9" ry="5.5" fill="#FF9F96"></ellipse><ellipse cx="17" cy="56" rx="9" ry="5.5" fill="#FF9F96"></ellipse><g class="lw"><ellipse cx="-53" cy="27" rx="11" ry="19" transform="rotate(24 -53 27)" fill="#EEF2FA" stroke="#6b7280" stroke-width="3.2" stroke-linejoin="round"></ellipse></g><g class="rw"><ellipse cx="53" cy="27" rx="11" ry="19" transform="rotate(-24 53 27)" fill="#EEF2FA" stroke="#6b7280" stroke-width="3.2" stroke-linejoin="round"></ellipse></g><g><path d="M-5 -61 Q-12 -83 2 -80 Q5 -69 2 -61 Z" fill="#FFFFFF" stroke="#6b7280" stroke-width="3.2" stroke-linejoin="round"></path><path d="M1 -61 Q6 -78 17 -73 Q11 -65 7 -60 Z" fill="#FFFFFF" stroke="#6b7280" stroke-width="3.2" stroke-linejoin="round"></path></g><path d="M0 -64 C30 -64 50 -48 50 -28 C50 -18 48 -11 45 -7 C51 -2 55 10 55 24 C55 45 33 55 0 55 C-33 55 -55 45 -55 24 C-55 10 -51 -2 -45 -7 C-48 -11 -50 -18 -50 -28 C-50 -48 -30 -64 0 -64 Z" fill="#FFFFFF" stroke="#6b7280" stroke-width="3.2" stroke-linejoin="round"></path><ellipse cx="0" cy="34" rx="32" ry="14" fill="#F3F6FB"></ellipse><ellipse cx="-33" cy="-18" rx="10" ry="6" fill="#FFBFC8"></ellipse><ellipse cx="33" cy="-18" rx="10" ry="6" fill="#FFBFC8"></ellipse><g><ellipse cx="-19" cy="-32" rx="8.5" ry="10" fill="#232B3A"></ellipse><ellipse cx="19" cy="-32" rx="8.5" ry="10" fill="#232B3A"></ellipse><g fill="#FFFFFF"><circle cx="-16" cy="-36" r="3.5"></circle><circle cx="22" cy="-36" r="3.5"></circle><circle cx="-21.5" cy="-27" r="1.6"></circle><circle cx="16.5" cy="-27" r="1.6"></circle></g></g><path d="M-6 -24 Q0 -28 6 -24 Q2 -15 0 -15 Q-2 -15 -6 -24 Z" fill="#FFB37A" stroke="#F0975A" stroke-width="1.5" stroke-linejoin="round"></path></g></svg>
+<!-- gugu:end -->
+        </div>
+      </div>
+      <div class="bar" aria-hidden="true"><i></i></div>
+    </div>
+    <script>
+      (function () {
+        var stage = document.getElementById("stage");
+        // 3초 안에 다시 이 페이지가 떴다면(서비스 워커가 '/' 를 또 이리로 보냈다면) 물음표를 붙여 비켜 간다 — 끝없이 돌지 않게
+        var KEY = "gg-launch";
+        var last = 0;
+        try { last = Number(sessionStorage.getItem(KEY) || 0); sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+        var next = Date.now() - last < 3000 ? "/?l=1" : "/";
+
+        var minDone = false, ready = false, gone = false;
+        function go() {
+          if (gone || !minDone || !ready) return;
+          gone = true;
+          stage.className = "stage on done";
+          setTimeout(function () { location.replace(next); }, 520);
+        }
+        function markReady() { ready = true; go(); }
+        setTimeout(function () { stage.className = "stage on"; }, 150);
+        setTimeout(function () { minDone = true; go(); }, 1600);
+
+        // 서비스 워커에게 미리 받는 '/' 가 다 왔는지 묻는다. 0.5초 안에 대답이 없으면(예전 서비스 워커 · 없음) 기다리지 않는다.
+        // 다 받을 때까지 기다리되 8초를 넘기지는 않는다
+        var sw = next === "/" && navigator.serviceWorker && navigator.serviceWorker.controller;
+        if (!sw) {
+          ready = true;
+        } else {
+          var acked = false;
+          var ch = new MessageChannel();
+          ch.port1.onmessage = function (e) {
+            if (e.data === "wait") acked = true;
+            else markReady();
+          };
+          sw.postMessage("gg-warm", [ch.port2]);
+          setTimeout(function () { if (!acked) markReady(); }, 500);
+          setTimeout(markReady, 8000);
+        }
+      })();
+    </script>
+  </body>
+</html>

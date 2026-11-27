@@ -1,0 +1,7 @@
+로뎀 월드 집 안 가구 — 모두 CC0(공개 도메인) 모델을 묶은 것 (2026-10-16, 2026-11-10 KayKit 22가지 더함)
+
+fb_*  KayKit : Furniture Bits 1.0 — Kay Lousberg (www.kaylousberg.com)
+      https://github.com/KayKit-Game-Assets/KayKit-Furniture-Bits-1.0
+tk_*  Tiny Treats : Charming Kitchen 1.0 — Isa Lousberg (www.isalousberg.com)
+      https://opengameart.org/content/tiny-treats-charming-kitchen-set
+      (그림은 ../tiny/tiny_treats_texture_1.png 와 같은 것을 쓴다)

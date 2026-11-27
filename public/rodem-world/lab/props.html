@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로뎀 월드 · 소품 시험</title>
+<!--
+  소품 시험(2026-11-15) — 지금 키트 모델과 코드로 만든 소품(lab/props.js)을 같은 빛 · 같은 각도로 나란히.
+  사용자 화면과 연결되지 않은 실험 페이지다(월드 · 앱 어디서도 링크하지 않는다). 실제 사람 · 목장 자료는 쓰지 않는다.
+    ?           나란히 비교(왼쪽 키트 | 오른쪽 새 것), 네 줄
+    ?fps=kit    키트 소품 120개를 돌리며 초당 장면 수
+    ?fps=new    새 소품 120개를 돌리며 초당 장면 수
+    ?all        코드로 만든 소품 전체 모음(&only=truck,well 은 고른 것만 크게, 두 각도)
+-->
+<style>
+  html, body { margin: 0; background: #e9f3dc; font: 13px/1.4 -apple-system, sans-serif; color: #33402a; }
+  #out { display: block; margin: 0 auto; max-width: 100%; }
+  #info { position: fixed; left: 8px; top: 8px; background: #fffc; padding: 6px 10px; border-radius: 10px; white-space: pre; }
+</style>
+</head>
+<body>
+<canvas id="out"></canvas>
+<div id="info">불러오는 중…</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script src="../props.js"></script>
+<script>
+(async () => {
+  const T = THREE, R = window.RodemProps, info = document.getElementById("info");
+  const qs = new URLSearchParams(location.search);
+
+  // 키트 읽기 — 월드(index.html)의 loadKit 과 같은 방식(필요한 것만 줄였다)
+  async function loadKit(base, name, front = false) {
+    const [j, buf] = await Promise.all([fetch(base + name + ".json").then((r) => r.json()), fetch(base + name + ".b64.txt").then((r) => r.text()).then((t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0)).buffer)]);
+    const tl = new T.TextureLoader(), texs = {}, mats = {}, models = {};
+    const tex = (f) => (texs[f] ??= new Promise((ok, no) => tl.load(base + f, (t) => { t.flipY = false; t.colorSpace = T.SRGBColorSpace; ok(t); }, undefined, no)));
+    const mat = async (n, col) => {
+      const k = n + (col ? "+c" : ""); if (mats[k]) return mats[k]; const m = j.mats[n];
+      const M = new T.MeshLambertMaterial({ color: m.tint || "#ffffff", map: m.tex ? await tex(m.tex) : null, alphaTest: m.mask ? Math.max(.35, m.cutoff) : 0, side: front && !m.mask ? T.FrontSide : T.DoubleSide, vertexColors: !!col });
+      if (m.factor) M.color.setRGB(m.factor[0], m.factor[1], m.factor[2]);
+      if (m.blend) { M.transparent = true; M.opacity = m.factor ? Math.max(.25, m.factor[3]) : .5; M.depthWrite = false; }
+      return (mats[k] = M);
+    };
+    for (const [n, md] of Object.entries(j.models)) {
+      const parts = [];
+      for (const p of md.prims) {
+        const g = new T.BufferGeometry();
+        g.setAttribute("position", new T.BufferAttribute(new Float32Array(buf, p.pos, p.v * 3), 3));
+        g.setAttribute("normal", new T.BufferAttribute(new Int8Array(buf, p.nrm, p.v * 3), 3, true));
+        g.setAttribute("uv", new T.BufferAttribute(new Float32Array(buf, p.uv, p.v * 2), 2));
+        if (p.col != null) g.setAttribute("color", new T.BufferAttribute(new Uint8Array(buf, p.col, p.v * 3), 3, true));
+        g.setIndex(new T.BufferAttribute(p.i32 ? new Uint32Array(buf, p.idx, p.i) : new Uint16Array(buf, p.idx, p.i), 1));
+        parts.push(new T.Mesh(g, await mat(p.mat, p.col != null)));
+      }
+      models[n] = parts;
+    }
+    return models;
+  }
+  const base = location.pathname.replace(/lab\/[^/]*$/, "");
+  let kitErr = null;
+  const [KAY, TINY, FURNI] = await Promise.all([loadKit(base + "kaykit/", "kaykit"), loadKit(base + "tiny/", "tiny", true), loadKit(base + "furni/", "furni", true)]).catch((e) => { kitErr = e; return [{}, {}, {}]; });
+  const kitGroup = (K, name) => { const g = new T.Group(); for (const m of K[name] || []) g.add(m.clone()); return g; };
+  const tris = (o) => { let n = 0; o.traverse((m) => { if (m.isMesh && m.material.side !== T.BackSide) { const g = m.geometry; n += (g.index ? g.index.count : g.attributes.position.count) / 3; } }); return Math.round(n); };
+
+  // 빛 — 월드와 같은 값(반구빛 + 해), 그림자 지도 없이 발밑 둥근 그림자
+  function stage() {
+    const s = new T.Scene();
+    s.add(new T.HemisphereLight("#fffdf4", "#8fbf6e", 1.65));
+    const sun = new T.DirectionalLight("#fff3d6", 2.4); sun.position.set(-48, 44, 32); s.add(sun, sun.target);
+    const ground = new T.Mesh(new T.CircleGeometry(40, 48).rotateX(-Math.PI / 2), new T.MeshLambertMaterial({ color: "#a9d77a" })); s.add(ground);
+    return s;
+  }
+  const BLOB = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const g = cv.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(0,0,0,1)"); gr.addColorStop(.55, "rgba(0,0,0,.55)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return new T.MeshBasicMaterial({ map: new T.CanvasTexture(cv), color: "#1d3316", transparent: true, opacity: .34, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }); })();
+  const blob = (r) => { const m = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), BLOB); m.scale.set(r * 2, 1, r * 1.6); m.position.y = .01; return m; };
+  /** 바닥에 앉히고 크기를 맞춘다 — 같은 높이로 비교 */
+  function fit(o, height) {
+    const b = new T.Box3().setFromObject(o), sz = b.getSize(new T.Vector3());
+    const k = height / Math.max(sz.y, .001); o.scale.multiplyScalar(k);
+    const b2 = new T.Box3().setFromObject(o), c = b2.getCenter(new T.Vector3());
+    o.position.x -= c.x; o.position.z -= c.z; o.position.y -= b2.min.y;
+    const s2 = b2.getSize(new T.Vector3()); return Math.max(s2.x, s2.z) / 2;
+  }
+
+  const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setClearColor("#cfe6fa"); renderer.setPixelRatio(1);
+
+  const ROWS = [
+    { name: "작은 집", kit: () => kitGroup(TINY, "house"), mk: () => R.house(), h: 2.6, dist: 6.4, yaw: .5 },
+    { name: "둥근 나무", kit: () => kitGroup(KAY, "Tree_1_A_Color1"), mk: () => R.tree(), h: 3.4, dist: 7.6, yaw: .4 },
+    { name: "나무 의자", kit: () => kitGroup(FURNI, "fb_chair_A_wood"), mk: () => R.chair(), h: 1.1, dist: 2.7, yaw: .7 },
+    { name: "꼬마 자동차", kit: null, mk: () => R.car(), h: 1.4, dist: 4.6, yaw: .7 },
+  ];
+
+  if (qs.get("fps")) {
+    // 성능 — 같은 소품 120개(종류별 30)를 원으로 놓고 카메라를 돌린다. 키트 / 새 것 같은 조건
+    const which = qs.get("fps"), W = 390, H = 844;
+    renderer.setSize(W, H); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+    document.body.replaceChild(renderer.domElement, document.getElementById("out"));
+    const s = stage(), cam = new T.PerspectiveCamera(48, W / H, .3, 400);
+    let total = 0, n = 0;
+    ROWS.forEach((row, ri) => {
+      for (let i = 0; i < 30; i++) {
+        const o = which === "kit" ? (row.kit ? row.kit() : R.car()) : row.mk();
+        const r = fit(o, row.h); const a = (i / 30) * Math.PI * 2 + ri * .2, rad = 10 + ri * 7;
+        o.position.x += Math.cos(a) * rad; o.position.z += Math.sin(a) * rad; o.rotation.y = -a;
+        s.add(o); const b = blob(r); b.position.x = o.position.x; b.position.z = o.position.z; s.add(b);
+        total += tris(o); n++;
+      }
+    });
+    // 화면이 가려져 있어도 잴 수 있게 — n 장을 연달아 그리고 장마다 GPU 가 끝날 때까지 기다린 평균(ms)
+    window.__bench = (nf = 240) => {
+      const gl = renderer.getContext(), px = new Uint8Array(4);
+      const one = (i) => { const a = i / 40; cam.position.set(Math.cos(a) * 8, 4.2, Math.sin(a) * 8); cam.lookAt(Math.cos(a + 1) * 20, 2, Math.sin(a + 1) * 20); renderer.render(s, cam); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+      for (let i = 0; i < 20; i++) one(i);
+      const t = performance.now(); for (let i = 0; i < nf; i++) one(i);
+      const ms = (performance.now() - t) / nf;
+      return { ms: +ms.toFixed(2), fps: Math.round(1000 / ms), tris: total, calls: renderer.info.render.calls, props: n };
+    };
+    let frames = 0, t0 = performance.now(), last = t0, fps = 0;
+    const loop = (t) => {
+      const a = t / 4000; cam.position.set(Math.cos(a) * 8, 4.2, Math.sin(a) * 8); cam.lookAt(Math.cos(a + 1) * 20, 2, Math.sin(a + 1) * 20);
+      renderer.render(s, cam); frames++;
+      if (t - t0 > 1000) { fps = frames * 1000 / (t - t0); frames = 0; t0 = t; window.__fps = (window.__fps || []).concat(Math.round(fps)); }
+      info.textContent = `${which === "kit" ? "키트" : "새 것"} 소품 ${n}개 · 세모 ${total.toLocaleString()}\n초당 장면 ${fps.toFixed(0)} · 그리기 ${renderer.info.render.calls}번`;
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  if (qs.has("all")) {
+    // 전체 모음 — 코드로 만든 소품을 한 장에(세 칸씩). 칸마다 같은 빛 · 같은 각도
+    // &only=truck,well — 고른 것만 크게, 앞 · 뒤 두 각도로
+    const only = (qs.get("only") || "").split(",").filter(Boolean);
+    const ITEMS = only.length ? R.LIST.filter(([k]) => only.includes(k)).flatMap((it) => [[...it, .65], [...it, -2.4]]) : R.LIST.map((it) => [...it, .65]);
+    const CW = only.length ? 390 : 260, CH = only.length ? 340 : 250, COLS = only.length ? 2 : 3, out = document.getElementById("out"), g2 = out.getContext("2d");
+    out.width = CW * COLS; out.height = CH * Math.ceil(ITEMS.length / COLS);
+    renderer.setSize(CW, CH);
+    const stats = [];
+    ITEMS.forEach(([key, label, , yaw], i) => {
+      const s = stage(), cam = new T.PerspectiveCamera(30, CW / CH, .1, 200), o = R[key]();
+      const b = new T.Box3().setFromObject(o), sz = b.getSize(new T.Vector3()), k = 2.2 / Math.max(sz.x, sz.y, sz.z);
+      const r = fit(o, sz.y * k); s.add(o, blob(r)); const t = tris(o), hh = sz.y * k;
+      cam.position.set(Math.sin(yaw) * 6.4, hh * .5 + 1.5, Math.cos(yaw) * 6.4); cam.lookAt(0, hh * .45, 0);
+      renderer.render(s, cam);
+      const x = (i % COLS) * CW, y = Math.floor(i / COLS) * CH;
+      g2.drawImage(renderer.domElement, x, y);
+      g2.fillStyle = "#33402acc"; g2.font = "bold 13px -apple-system, sans-serif"; g2.fillText(`${label} · ${t.toLocaleString()}`, x + 10, y + 20);
+      stats.push({ key, tris: t });
+    });
+    window.__stats = stats; info.textContent = "준비됨";
+    window.__save = async (name) => { const blob = await new Promise((r) => out.toBlob(r, "image/png")); return (await fetch("/save?name=" + name, { method: "POST", body: blob })).ok; };
+    return;
+  }
+
+  // 나란히 비교 — 칸마다 따로 그려 한 장으로
+  const CW = 390, CH = 300, out = document.getElementById("out"), g2 = out.getContext("2d");
+  out.width = CW * 2; out.height = CH * ROWS.length + 40;
+  renderer.setSize(CW, CH);
+  g2.fillStyle = "#f6faef"; g2.fillRect(0, 0, out.width, out.height);
+  g2.fillStyle = "#33402a"; g2.font = "bold 18px -apple-system, sans-serif";
+  g2.fillText("지금 키트", 16, 27); g2.fillText("코드로 만든 것", CW + 16, 27);
+  const stats = [];
+  ROWS.forEach((row, i) => {
+    for (const side of [0, 1]) {
+      const s = stage(), cam = new T.PerspectiveCamera(32, CW / CH, .1, 200);
+      const o = side === 0 ? (row.kit ? row.kit() : null) : row.mk();
+      let t = 0;
+      if (o) { const r = fit(o, row.h); s.add(o, blob(r)); t = tris(o); }
+      cam.position.set(Math.sin(row.yaw) * row.dist, row.h * .62 + .5, Math.cos(row.yaw) * row.dist); cam.lookAt(0, row.h * .45, 0);
+      renderer.render(s, cam);
+      g2.drawImage(renderer.domElement, side * CW, 40 + i * CH);
+      g2.fillStyle = "#33402acc"; g2.font = "bold 14px -apple-system, sans-serif";
+      g2.fillText(o ? `${row.name} · 세모 ${t.toLocaleString()}` : `${row.name} · 키트에 없음`, side * CW + 14, 40 + i * CH + 22);
+      stats.push({ row: row.name, side: side ? "new" : "kit", tris: t });
+    }
+  });
+  g2.strokeStyle = "#ffffff"; g2.lineWidth = 3; g2.beginPath(); g2.moveTo(CW, 40); g2.lineTo(CW, out.height); g2.stroke();
+  window.__stats = stats;
+  info.textContent = kitErr ? "키트를 불러오지 못했어요" : "준비됨";
+  // 시험 도구(로컬 serve.py)에서만 쓰는 저장 — 다른 곳에선 아무 일도 하지 않는다
+  window.__save = async (name) => { const blob = await new Promise((r) => out.toBlob(r, "image/png")); return (await fetch("/save?name=" + name, { method: "POST", body: blob })).ok; };
+})();
+</script>
+</body>
+</html>
